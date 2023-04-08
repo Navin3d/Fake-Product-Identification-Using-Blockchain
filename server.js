@@ -505,7 +505,7 @@ app.post('/signUp', (req, res) => {
 
 // Add the user in Blockchain
 function createCustomer(hashedEmail, name, phone) {
-    return contractInstance.methods.createCustomer(hashedEmail, name, phone, { from: web3.eth.accounts[0], gas: 3000000 });
+    return contractInstance.methods.createCustomer(hashedEmail, name, phone).send({ from: web3.eth.accounts[0], gas: 3000000 });
 }
 
 
@@ -526,7 +526,7 @@ app.post('/login', (req, res) => {
             return res.status(400);
         }
         if (results.length) {
-            connection.query('SELECT Password FROM USER WHERE Email = (?)', [email], (error, results) => {
+            connection.query('SELECT hashedPassword FROM USER WHERE Email = (?)', [email], (error, results) => {
                 if (error) {
                     console.log(error);
                     return res.status(400);
@@ -651,7 +651,7 @@ app.post('/addRetailerToCode', (req, res) => {
     let retailerEmail = req.body.email;
     let hashedEmail = hashMD5(retailerEmail);
     console.log(`retailerEmail: ${retailerEmail}, hashed email: ${hashedEmail} \n`);
-    let ok = contractInstance.addRetailerToCode(code, hashedEmail);
+    let ok = contractInstance.methods.addRetailerToCode(code, hashedEmail).call();
     if(!ok) {
         return res.status(400).send('Error');
     }
@@ -676,8 +676,8 @@ app.post('/myAssets', (req, res) => {
     console.log(`Email ${email}`);
     console.log(`Customer has these product codes: ${arrayOfCodes} \n`);
     for (code in arrayOfCodes) {
-        let ownedCodeDetails = contractInstance.getOwnedCodeDetails(arrayOfCodes[code]);
-        let notOwnedCodeDetails = contractInstance.getNotOwnedCodeDetails(arrayOfCodes[code]);
+        let ownedCodeDetails = contractInstance.methods.getOwnedCodeDetails(arrayOfCodes[code]).call();
+        let notOwnedCodeDetails = contractInstance.methods.getNotOwnedCodeDetails(arrayOfCodes[code]).call();
         myAssetsArray.push({
             'code': arrayOfCodes[code], 'brand': notOwnedCodeDetails[0],
             'model': notOwnedCodeDetails[1], 'description': notOwnedCodeDetails[2],
@@ -703,7 +703,7 @@ app.post('/stolen', (req, res) => {
     let email = req.body.email;
     let hashedEmail = hashMD5(email);
     console.log(`Email: ${email} \n`);
-    let ok = contractInstance.reportStolen(code, hashedEmail);
+    let ok = contractInstance.methods.reportStolen(code, hashedEmail).call();
     if (!ok) {
         console.log(`ERROR! Code: ${code} status could not be changed.\n`);
         return res.status(400).send('ERROR! Product status could not be changed.');
@@ -787,8 +787,8 @@ app.post('/getProductDetails', (req, res) => {
             let timeElapsed = Math.floor((currentTime - QRCodes[i]['currentTime']) / 1000);
             // QR Codes are valid only for 600 secs
             if (timeElapsed <= 600) {
-                let ownedCodeDetails = contractInstance.getOwnedCodeDetails(code);
-                let notOwnedCodeDetails = contractInstance.getNotOwnedCodeDetails(code);
+                let ownedCodeDetails = contractInstance.methods.getOwnedCodeDetails(code).call();
+                let notOwnedCodeDetails = contractInstance.methods.getNotOwnedCodeDetails(code).call();
                 if (!ownedCodeDetails || !notOwnedCodeDetails) {
                     return res.status(400).send('Could not retrieve product details.');
                 }
@@ -868,12 +868,10 @@ app.post('/buyerConfirm', (req, res) => {
                     var ok;
                     if(QRCodes[i]['retailer'] === '1'){
                         console.log('Performing transaction for retailer\n');
-                        ok = contractInstance.initialOwner(code, hashedSellerEmail, hashedBuyerEmail,
-                                                        { from: web3.eth.accounts[0], gas: 3000000 });
+                        ok = contractInstance.methods.initialOwner(code, hashedSellerEmail, hashedBuyerEmail).send({ from: web3.eth.accounts[0], gas: 3000000 });
                     } else {
                         console.log('Performing transaction for customer\n');
-                        ok = contractInstance.changeOwner(code, hashedSellerEmail, hashedBuyerEmail,
-                                                        { from: web3.eth.accounts[0], gas: 3000000 });
+                        ok = contractInstance.methods.changeOwner(code, hashedSellerEmail, hashedBuyerEmail).send({ from: web3.eth.accounts[0], gas: 3000000 });
                     }
                     if (!ok) {
                         return res.status(400).send('Error');
@@ -892,14 +890,12 @@ app.post('/buyerConfirm', (req, res) => {
 
 // Function that creates an initial owner for a product
 function initialOwner(code, retailerHashedEmail, customerHashedEmail) {
-    return contractInstance.initialOwner(code, retailerHashedEmail, customerHashedEmail,
-                                        { from: web3.eth.accounts[0], gas: 3000000 });
+    return contractInstance.methods.initialOwner(code, retailerHashedEmail, customerHashedEmail).send({ from: web3.eth.accounts[0], gas: 3000000 });
 }
 
 // Function that creates transfers ownership of a product
 function changeOwner(code, oldOwnerHashedEmail, newOwnerHashedEmail) {
-    return contractInstance.changeOwner(code, oldOwnerHashedEmail, newOwnerHashedEmail,
-                                        { from: web3.eth.accounts[0], gas: 3000000 });
+    return contractInstance.methods.changeOwner(code, oldOwnerHashedEmail, newOwnerHashedEmail).send({ from: web3.eth.accounts[0], gas: 3000000 });
 }
 
 
@@ -912,7 +908,7 @@ function changeOwner(code, oldOwnerHashedEmail, newOwnerHashedEmail) {
 app.post('/scan', (req, res) => {
     console.log('Request made to /scan\n');
     let code = req.body.code;
-    let productDetails = contractInstance.getNotOwnedCodeDetails(code);
+    let productDetails = contractInstance.methods.getNotOwnedCodeDetails(code).call();
     let productDetailsObj = {
         'name': productDetails[0], 'model': productDetails[1], 'status': productDetails[2],
         'description': productDetails[3], 'manufacturerName': productDetails[4],
@@ -942,8 +938,7 @@ app.post('/QRCodeForManufacturer', async (req, res) => {
     let salt = crypto.randomBytes(20).toString('hex');
     let code = hashMD5(brand + model + status + description + manufacturerName + manufacturerLocation + salt);
 	let account = await getAccounts();
-    let ok = contractInstance.methods.createCode(code, brand, model, status, description, manufacturerName, manufacturerLocation,
-                                        manufacturerTimestamp).send({ from: account[0], gas: 3000000 });
+    let ok = contractInstance.methods.createCode(code, brand, model, status, description, manufacturerName, manufacturerLocation, manufacturerTimestamp).send({ from: account[0], gas: 3000000 });
     console.log(`Brand: ${brand} \n`);
     if (!ok) {
         return res.status(400).send('ERROR! QR Code for manufacturer could not be generated.');
@@ -970,7 +965,7 @@ app.get('/getCustomerDetails', (req, res) => {
     console.log('Request to /getCustomerDetails\n');
     let email = req.body.email;
     let hashedEmail = hash(email);
-    let customerDetails = contractInstance.getCustomerDetails(hashedEmail);
+    let customerDetails = contractInstance.methods.getCustomerDetails(hashedEmail).call();
     console.log(`Email: ${email} \n`);
     let customerDetailsObj = {
         'name': customerDetails[0], 'phone': customerDetails[1]
